@@ -1,0 +1,14 @@
+[variables]
+NODE_VERSION = "20"
+
+[phases.setup]
+providers = ["node"]
+
+[phases.install]
+cmds = ["npm install"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm run start"
