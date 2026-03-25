@@ -49,9 +49,15 @@ frontend_url = os.getenv("FRONTEND_URL")
 if frontend_url:
     origins.append(frontend_url)
 
+frontend_urls = os.getenv("FRONTEND_URLS")
+if frontend_urls:
+    origins.extend([url.strip() for url in frontend_urls.split(",") if url.strip()])
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    # Railway preview/public frontend domains are stable enough to allow by pattern.
+    allow_origin_regex=r"https://.*\.up\.railway\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
