@@ -837,6 +837,7 @@ function PersonalOverviewCard({
   onCreateWatch,
   onOpenBriefing,
   onCallNow,
+  callError,
   previewingWatchId,
   callingWatchId,
   conversation,
@@ -847,6 +848,7 @@ function PersonalOverviewCard({
   onCreateWatch: () => void;
   onOpenBriefing: (watchId: number) => void;
   onCallNow: (watchId: number) => void;
+  callError: string;
   previewingWatchId: number | null;
   callingWatchId: number | null;
   conversation: ConversationState | null;
@@ -901,6 +903,11 @@ function PersonalOverviewCard({
                 {loadingTranscriptWatchId === latestBriefing.watch_id ? "Loading..." : "View transcript"}
               </button>
             </div>
+            {callError ? (
+              <p className="text-[12px] mt-3" style={{ color: "var(--critical)" }}>
+                {callError}
+              </p>
+            ) : null}
             {conversation?.transcript?.length ? (
               <p className="text-[11px] mt-3" style={{ color: "var(--text-tertiary)" }}>
                 Transcript ready. Open it from the transcript button or the alert detail panel.
@@ -1237,6 +1244,7 @@ export default function Dashboard() {
   const [latestBriefing, setLatestBriefing] = useState<BriefingPreview | null>(null);
   const [previewingWatchId, setPreviewingWatchId] = useState<number | null>(null);
   const [callingWatchId, setCallingWatchId] = useState<number | null>(null);
+  const [callError, setCallError] = useState("");
   const [conversationByWatch, setConversationByWatch] = useState<Record<number, ConversationState>>({});
   const [loadingTranscriptWatchId, setLoadingTranscriptWatchId] = useState<number | null>(null);
 
@@ -1328,12 +1336,25 @@ export default function Dashboard() {
 
   const callNow = async (watchId: number) => {
     setCallingWatchId(watchId);
+    setCallError("");
     try {
-      await fetch(`${API_URL}/watch/${watchId}/call-now`, { method: "POST" });
+      const response = await fetch(`${API_URL}/watch/${watchId}/call-now`, { method: "POST" });
+      if (!response.ok) {
+        let message = "Call could not be started";
+        try {
+          const data = await response.json();
+          message = data?.detail || message;
+        } catch {
+          // Leave the fallback message when the backend response is not JSON.
+        }
+        throw new Error(message);
+      }
       refreshAll();
       await openBriefingPreview(watchId);
       setTimeout(() => loadConversation(watchId), 3000);
-    } catch {}
+    } catch (error: unknown) {
+      setCallError(error instanceof Error ? error.message : "Call could not be started");
+    }
     setCallingWatchId(null);
   };
 
@@ -1526,6 +1547,7 @@ export default function Dashboard() {
               onCreateWatch={() => setShowModal(true)}
               onOpenBriefing={openBriefingPreview}
               onCallNow={callNow}
+              callError={callError}
               previewingWatchId={previewingWatchId}
               callingWatchId={callingWatchId}
               conversation={latestBriefing ? conversationByWatch[latestBriefing.watch_id] || null : null}
