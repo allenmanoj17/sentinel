@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useState, type CSSProperties, type ReactNode } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = "/api";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 

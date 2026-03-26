@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_URL = "/api";
 
 interface Watch { id: number; topic: string; mode: string; threshold: number; frequency_minutes: number; created_at: string; }
 
