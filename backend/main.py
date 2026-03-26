@@ -56,7 +56,7 @@ if frontend_urls:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    # Railway preview/public frontend domains are stable enough to allow by pattern.
+    # Railway preview URLs are ephemeral, so keep a broad allow-list for public Railway domains.
     allow_origin_regex=r"https://.*\.up\.railway\.app",
     allow_credentials=True,
     allow_methods=["*"],
@@ -70,7 +70,7 @@ async def startup():
     start_scheduler()
 
 
-# ── Models ──
+# Pydantic request models
 
 class TeamMemberIn(BaseModel):
     name: str
@@ -140,7 +140,7 @@ def normalize_conversation_payload(payload: dict) -> dict:
     }
 
 
-# ── Watch routes ──
+# Watch routes
 
 @app.post("/watch")
 async def create_watch_route(data: WatchIn):
@@ -149,8 +149,7 @@ async def create_watch_route(data: WatchIn):
         raise HTTPException(429, f"Maximum {MAX_ACTIVE_WATCHES} active watches reached")
 
     payload = data.model_dump() if hasattr(data, "model_dump") else data.dict()
-    # The packed topic lets us keep the existing schema while storing both
-    # the human-friendly watch name and the Firecrawl search query.
+    # Pack the display label and Firecrawl query into the existing topic column.
     config = consolidate_watch_request(payload)
     stored_topic = pack_watch_topic(config["watch_name"], config["search_query"])
 
@@ -165,21 +164,18 @@ async def create_watch_route(data: WatchIn):
 
     team_id = None
 
-    # Team watches keep their members in the team tables so one signal can
-    # produce role-specific briefings without duplicating watch rows.
+    # Team members live separately so one watch can fan out different role-specific briefings.
     if data.mode == "team" and data.team_members:
         from db import create_team, add_team_member_to_team, supabase
 
-        # Use existing team_id or create a new team
+        # Reuse a supplied team when possible; otherwise create one for this watch.
         if data.team_id:
             team_id = data.team_id
         else:
             team_id = create_team(f"{config['watch_name']} team")
 
-        # Link the watch to the team
         supabase.table("watches").update({"team_id": team_id}).eq("id", watch_id).execute()
 
-        # Add members to the team
         for member in data.team_members:
             add_team_member_to_team(team_id, member.name, member.role, member.phone, member.email)
 
@@ -374,7 +370,7 @@ async def simulate(watch_id: int, topic: str = "OpenAI"):
     return {"status": "simulation fired", "topic": topic, "watch_id": watch_id}
 
 
-# ── Twilio webhook ──
+# Twilio webhook
 
 @app.post("/twilio/voice")
 async def twilio_voice(CallSid: str = Form(default="")):
@@ -421,8 +417,7 @@ async def elevenlabs_webhook(request: Request):
         if conversation_id:
             session = get_call_session_by_conversation_id(conversation_id)
             if session:
-                # Match the webhook back to the persisted call session so
-                # transcripts survive backend restarts.
+                # Update the stored call session instead of keeping transcript state in memory only.
                 save_transcript_for_watch(
                     session["watch_id"],
                     conversation_id=conversation_id,
@@ -435,7 +430,7 @@ async def elevenlabs_webhook(request: Request):
     return {"status": "received"}
 
 
-# ── Calendar ──
+# Calendar
 
 @app.get("/calendar/auth")
 async def calendar_auth(watch_id: int):
@@ -455,14 +450,14 @@ async def calendar_callback(code: str, state: str):
     return RedirectResponse(f"{frontend_url}/app")
 
 
-# ── Health ──
+# Health
 
 @app.get("/")
 async def health():
     return {"status": "Sentinel is running", "version": "1.0.0"}
 
 
-# ── Waitlist ──
+# Waitlist
 
 @app.post("/waitlist")
 async def join_waitlist(request: Request):
@@ -478,7 +473,7 @@ async def join_waitlist(request: Request):
     return {"status": "joined"}
 
 
-# ── Team by watch (backwards compatible) ──
+# Team by watch (backwards compatible)
 
 @app.get("/team/{watch_id}")
 async def get_team(watch_id: int):
@@ -488,7 +483,7 @@ async def get_team(watch_id: int):
     if not watch:
         raise HTTPException(404, "Watch not found")
 
-    # Try team_id first (new way), fall back to watch_id (old way)
+    # Newer rows use team_id; older rows still link members directly to watch_id.
     team_id = watch.get("team_id")
     if team_id:
         members = get_team_members_by_team(team_id)
@@ -514,7 +509,7 @@ async def add_team_member_route(watch_id: int, member: TeamMemberIn):
     if watch.get("mode") != "team":
         raise HTTPException(400, "Watch is not in team mode")
 
-    # Add to team if team_id exists, otherwise add to watch directly
+    # Keep compatibility with both the team table flow and older watch-linked members.
     team_id = watch.get("team_id")
     if team_id:
         add_team_member_to_team(team_id, member.name, member.role, member.phone, member.email)
@@ -524,7 +519,7 @@ async def add_team_member_route(watch_id: int, member: TeamMemberIn):
     return {"status": "added", "watch_id": watch_id, "team_id": team_id}
 
 
-# ── Alerts ──
+# Alerts
 
 @app.get("/alerts")
 async def list_alerts(limit: int = Query(default=50, le=200)):
@@ -550,7 +545,7 @@ async def list_alerts(limit: int = Query(default=50, le=200)):
     return {"alerts": alerts}
 
 
-# ── Teams (standalone CRUD) ──
+# Teams
 
 @app.post("/teams")
 async def create_team_route(data: TeamIn):

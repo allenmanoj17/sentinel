@@ -6,10 +6,7 @@ from datetime import datetime, timezone
 
 load_dotenv()
 
-# ──────────────────────────────────────────────
-# CONNECTION
-# Reads SUPABASE_URL and SUPABASE_KEY from .env
-# ──────────────────────────────────────────────
+# Shared Supabase client for API handlers and scheduled jobs.
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
@@ -26,10 +23,7 @@ def init_db():
         print(f"[DB] Supabase connection failed: {e}")
 
 
-# ──────────────────────────────────────────────
-# WATCHES
-# Each row = one monitoring job ("watch OpenAI every 30 min")
-# ──────────────────────────────────────────────
+# Watch rows represent the recurring monitoring jobs.
 
 def create_watch(topic, mode, phone, email, threshold, frequency):
     """Create a new watch. Returns the new watch ID."""
@@ -98,11 +92,7 @@ def deactivate_watch(watch_id):
         .execute()
 
 
-# ──────────────────────────────────────────────
-# TEAM MEMBERS
-# Each row = one person to call when a team watch triggers
-# Role determines what angle the briefing focuses on
-# ──────────────────────────────────────────────
+# Team members receive role-specific briefings from the same triggering event.
 
 def add_team_member(watch_id, name, role, phone, email=None):
     """Add a team member to a watch."""
@@ -124,11 +114,7 @@ def get_team_members(watch_id):
     return result.data
 
 
-# ──────────────────────────────────────────────
-# LOGS
-# Every poll cycle creates a log — even if nothing happened.
-# Powers the live dashboard feed.
-# ──────────────────────────────────────────────
+# Logs capture every poll cycle, even when nothing escalates.
 
 def insert_log(watch_id, score, summary, sources, action):
     """Insert a poll log entry. Returns the new log ID."""
@@ -159,8 +145,7 @@ def get_logs(limit=100):
         .limit(limit) \
         .execute()
 
-    # Supabase returns joins as nested dicts: {"watches": {"topic": "OpenAI"}}
-    # We flatten it so the frontend gets a clean {..."topic": "OpenAI"} shape
+    # Flatten the join so the API returns one predictable object per log row.
     logs = []
     for row in result.data:
         log = dict(row)
@@ -173,11 +158,7 @@ def get_logs(limit=100):
     return logs
 
 
-# ──────────────────────────────────────────────
-# ALERTS
-# Only stores events that actually triggered a notification.
-# Unlike logs (which store everything), this is the "things that mattered" table.
-# ──────────────────────────────────────────────
+# Alerts store only the events that triggered a user-facing escalation.
 
 def insert_alert(watch_id, score, action, briefing):
     """Insert an alert. Called only when a real notification fires."""
@@ -200,10 +181,7 @@ def get_latest_alert_for_watch(watch_id):
     return result.data[0] if result.data else None
 
 
-# ──────────────────────────────────────────────
-# DAILY COUNTERS
-# Used to enforce rate limits: max 20 calls/day, max 10 agent runs/day
-# ──────────────────────────────────────────────
+# Daily counters back the product rate limits.
 
 def get_daily_call_count():
     """Count calls made today. Checks logs for call/batch_call/simulated actions."""
@@ -226,10 +204,7 @@ def get_daily_agent_count():
     return result.count or 0
 
 
-# ──────────────────────────────────────────────
-# CALL SESSIONS
-# Persists ElevenLabs conversation state and transcripts across restarts.
-# ──────────────────────────────────────────────
+# Call sessions keep ElevenLabs conversation state durable across backend restarts.
 
 def save_call_session(watch_id, conversation_id=None, call_sid=None, status="initiated", briefing="", transcript=None, metadata=None, analysis=None):
     payload = {
@@ -247,8 +222,7 @@ def save_call_session(watch_id, conversation_id=None, call_sid=None, status="ini
     if conversation_id:
         existing = get_call_session_by_conversation_id(conversation_id)
 
-    # ElevenLabs may send follow-up state for the same conversation more than once.
-    # Updating in place keeps one durable record per conversation.
+    # ElevenLabs can send multiple updates for one conversation, so upsert by conversation id.
     if existing:
         supabase.table("call_sessions") \
             .update(payload) \
@@ -288,7 +262,7 @@ def get_call_session_by_conversation_id(conversation_id):
         .execute()
     return result.data[0] if result.data else None
 
-# ── TEAMS ──
+# Team records
 
 def create_team(name):
     """Create a team. Returns the team ID."""

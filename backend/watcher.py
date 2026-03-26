@@ -1,14 +1,9 @@
 """
-watcher.py — The brain of Sentinel
-
-This file does 4 things:
-1. CRAWL:   Uses Firecrawl to search the web for a topic and get a snapshot
-2. DIFF:    Sends old vs new snapshot to Claude Haiku, gets a change score (0-10)
-3. RESEARCH: If score is high enough, uses Firecrawl Agent for deep research
-4. BRIEFING: Uses Claude Sonnet to write a natural spoken briefing for the call
-
-The poll_watch() function ties it all together and runs on a schedule.
-The scheduler checks each watch at its configured interval (every 15/30/60 min).
+watcher.py runs the polling pipeline:
+- gather a fresh Firecrawl snapshot
+- compare it with the stored baseline
+- optionally run deeper research
+- generate the briefing text used by notifications
 """
 
 import os
@@ -21,9 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# ──────────────────────────────────────────────
-# API CLIENTS
-# ──────────────────────────────────────────────
+# Shared API clients for crawl and scoring work.
 
 from firecrawl import FirecrawlApp
 import anthropic
@@ -44,17 +37,7 @@ _crawl_cache: dict[str, tuple[float, str]] = {}
 _crawl_cache_lock = threading.Lock()
 
 
-# ──────────────────────────────────────────────
-# STEP 1: CRAWL
-# Searches the web for a topic using Firecrawl Search API.
-# Returns a text snapshot of what's out there right now.
-#
-# Example: crawl("OpenAI") might return:
-#   "SOURCE: TechCrunch\nURL: https://...\nOpenAI announced...\n---\n
-#    SOURCE: Reuters\nURL: https://...\nThe company said...\n---"
-#
-# This snapshot gets compared against the previous one to detect changes.
-# ──────────────────────────────────────────────
+# Crawl helpers build a compact snapshot that can be diffed cheaply on every poll.
 
 def extract_seed_urls(query: str) -> list[str]:
     seen: set[str] = set()

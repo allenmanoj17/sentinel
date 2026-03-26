@@ -13,6 +13,7 @@ async function proxy(request: NextRequest, context: { params: Promise<{ path: st
   const { path } = await context.params;
   const target = buildTarget(path, request);
 
+  // Proxy through Next so browser requests stay same-origin in production.
   const headers = new Headers(request.headers);
   headers.delete("host");
   headers.delete("connection");

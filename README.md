@@ -1,18 +1,28 @@
 # Sentinel
 
-Sentinel is a web intelligence app that monitors important changes online, verifies them with exact source links, and escalates high-signal updates through voice briefings.
+Sentinel is a web intelligence app that watches for meaningful changes online, verifies them with source evidence, and escalates important updates through voice briefings.
 
-The product supports two modes:
+It supports two modes:
 - `Personal`
 - `Team`
 
-## What It Does
+## What Sentinel Does
 
-- creates watches for topics, companies, people, or URLs
-- uses Firecrawl to gather web evidence
-- uses Claude to score and summarize important changes
-- uses ElevenLabs to deliver voice briefings
-- stores app data in Supabase
+- creates watches for companies, people, topics, pages, and URLs
+- uses Firecrawl to gather evidence from the web
+- uses Claude to score and summarize changes
+- uses ElevenLabs to place voice briefings
+- stores watches, logs, alerts, and call sessions in Supabase
+
+## Stack
+
+- `frontend/`: Next.js
+- `backend/`: FastAPI
+- `database`: Supabase
+- `search/crawl`: Firecrawl
+- `reasoning`: Anthropic Claude
+- `voice`: ElevenLabs
+- `fallback notifications`: Twilio and Resend
 
 ## Repo Structure
 
@@ -21,39 +31,80 @@ The product supports two modes:
 Next.js app for:
 - landing page
 - dashboard
-- personal watches
+- personal watch flow
 - team workspace
-- transcripts and briefing previews
+- transcript and briefing UI
+- same-origin API proxy route
+
+Important files:
+- [frontend/src/app/page.tsx](frontend/src/app/page.tsx)
+- [frontend/src/app/app/page.tsx](frontend/src/app/app/page.tsx)
+- [frontend/src/app/app/team/page.tsx](frontend/src/app/app/team/page.tsx)
+- [frontend/src/app/api/[...path]/route.ts](frontend/src/app/api/[...path]/route.ts)
 
 ### `backend/`
 
 FastAPI app for:
-- watch creation and polling
+- watch creation
+- polling and scheduling
 - Firecrawl search and scrape
-- scoring and briefing generation
-- notifications and outbound calls
+- Claude-based scoring and briefing generation
+- ElevenLabs outbound calls and transcript sync
 - Supabase persistence
 
-## Main Flow
+Important files:
+- [backend/main.py](backend/main.py)
+- [backend/db.py](backend/db.py)
+- [backend/watcher.py](backend/watcher.py)
+- [backend/watch_config.py](backend/watch_config.py)
+- [backend/notifier.py](backend/notifier.py)
 
-1. Create a personal or team watch.
-2. The backend consolidates the watch form into a usable monitoring query.
-3. Firecrawl retrieves evidence from search results and direct URLs.
-4. Claude decides whether the change matters and prepares a summary.
-5. Sentinel can stay silent, send fallback notifications, or trigger a voice call.
-6. The frontend shows the update, briefing, and exact source links.
+## Product Flow
 
-## Exact Source Links
+1. A user creates a personal or team watch.
+2. The backend consolidates the form into:
+   - a display name
+   - a Firecrawl monitoring query
+3. Sentinel polls on the chosen interval.
+4. Firecrawl gathers evidence from search results and direct URLs.
+5. Claude scores the change and explains why it matters.
+6. Sentinel stores the result and can:
+   - stay silent
+   - send fallback notifications
+   - place a voice call
+7. The frontend shows:
+   - active watches
+   - recent updates
+   - latest briefing
+   - source evidence
+   - transcripts when available
 
-Sentinel is intended to show the exact URLs used for an event, not just publisher names.
+## Exact Source Evidence
 
-Older rows in your database may still contain older source formats, but new rows should use specific links.
+Sentinel is designed to show exact source URLs for an event, not just publisher names.
+
+Older rows in an existing database may still use older source formats. Newer rows should use exact links.
+
+## Requirements
+
+You need:
+- Node.js 20+
+- Python 3.11+ or 3.12+
+- a Supabase project
+- Firecrawl API key
+- Anthropic API key
+- ElevenLabs API key and agent
+
+Optional but used by the current app:
+- Twilio account
+- Resend account
+- Google Calendar credentials
 
 ## Environment Variables
 
 ### Backend
 
-Use [backend/.env.example](/Users/AllenPVT/Downloads/sentinel/backend/.env.example) as a template.
+Use [backend/.env.example](backend/.env.example) as the template.
 
 Main variables:
 - `SUPABASE_URL`
@@ -68,24 +119,37 @@ Main variables:
 - `TWILIO_PHONE_NUMBER`
 - `RESEND_API_KEY`
 - `FRONTEND_URL`
+- `FRONTEND_URLS`
 
 ### Frontend
 
-Use [frontend/.env.local.example](/Users/AllenPVT/Downloads/sentinel/frontend/.env.local.example).
+Use [frontend/.env.local.example](frontend/.env.local.example).
 
 Main variable:
+- `API_URL`
 
-- `NEXT_PUBLIC_API_URL`
+`API_URL` should point to the public backend base URL, for example:
+
+```env
+API_URL=https://your-backend.up.railway.app
+```
+
+The frontend does not need to call the backend directly from the browser. It uses the Next.js proxy route in [frontend/src/app/api/[...path]/route.ts](frontend/src/app/api/[...path]/route.ts), which forwards `/api/*` requests to the backend server-side.
+
+## Supabase Expectations
+
+This repository assumes you already have a Supabase project configured with the tables the app expects.
+
+At a minimum, the app expects data storage for:
+- watches
+- logs
+- alerts
+- team members / teams
+- call sessions
+
+This repo currently does not include local SQL migration files.
 
 ## Local Development
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
 
 ### Backend
 
@@ -97,161 +161,141 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-Frontend default:
+Backend default:
+- `http://localhost:8000`
 
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend default:
 - `http://localhost:3000`
 
-Backend default:
+For local frontend development:
 
-- `http://localhost:8000`
+```env
+API_URL=http://localhost:8000
+```
+
+## Railway Deployment
+
+This repo is meant to be deployed as a two-service setup:
+- one Railway service for `backend/`
+- one Railway service for `frontend/`
+
+### Backend Service
+
+Root directory:
+- `backend`
+
+Build command:
+
+```bash
+pip install -r requirements.txt
+```
+
+Start command:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+### Frontend Service
+
+Root directory:
+- `frontend`
+
+The frontend repo contains:
+- [frontend/Dockerfile](frontend/Dockerfile)
+- [frontend/Procfile](frontend/Procfile)
+- [frontend/nixpacks.toml](frontend/nixpacks.toml)
+
+For Railway, the stable path is to deploy the frontend from the Dockerfile.
+
+Frontend env:
+
+```env
+API_URL=https://your-backend.up.railway.app
+```
+
+### CORS
+
+Backend CORS is configured to allow:
+- localhost development
+- `FRONTEND_URL`
+- `FRONTEND_URLS`
+- Railway public domains matching `https://*.up.railway.app`
+
+## Vercel Deployment
+
+If you only want to deploy the frontend to Vercel:
+- deploy `frontend/`
+- keep the backend elsewhere
+- set `API_URL` in the frontend environment to the public backend URL
+
+If you deploy only the landing page and no backend exists:
+- the UI will render
+- the waitlist form and app actions will not work unless replaced
+
+## ElevenLabs Webhook
+
+For transcript sync after calls:
+
+1. point the ElevenLabs webhook to:
+   - `/elevenlabs/webhook`
+2. subscribe it to post-call transcript events
+3. set `ELEVENLABS_WEBHOOK_SECRET` if you want signature validation
+
+## Known Limitations
+
+- `Call now` requires a watch with a usable briefing or summary. If a watch has no alert or log summary yet, the backend can return `No briefing is available for this watch yet`.
+- Existing Supabase rows created before the exact-source-link path was added may still show older source formats.
+- This repo assumes your Supabase schema is already present.
+
+## Troubleshooting
+
+### Frontend tries to call `localhost:8000` in production
+
+That means the deployed frontend bundle is stale or the frontend is not using the proxy route build.
+
+Current frontend requests should go to:
+- `/api/...` on the frontend domain
+
+Make sure:
+- the latest frontend code is deployed
+- `API_URL` is set on the frontend service
+
+### Waitlist fails from browser but backend works in curl
+
+That is usually CORS or frontend deployment drift.
+
+Check:
+- browser DevTools `Network`
+- Railway frontend deploy logs
+- Railway backend logs
+
+### `Call now` returns `400`
+
+Check the backend response body and Railway backend logs.
+
+Common reasons:
+- no briefing exists yet for that watch
+- ElevenLabs config is missing or invalid
+- phone number data is missing or invalid
 
 ## Repo Files
 
-For a basic open-source repo, the project now includes:
-
-- [README.md](/Users/AllenPVT/Downloads/sentinel/README.md)
-- [.gitignore](/Users/AllenPVT/Downloads/sentinel/.gitignore)
-- [LICENSE](/Users/AllenPVT/Downloads/sentinel/LICENSE)
-- [backend/.env.example](/Users/AllenPVT/Downloads/sentinel/backend/.env.example)
-- [frontend/.env.local.example](/Users/AllenPVT/Downloads/sentinel/frontend/.env.local.example)
-
-## Supabase Setup
-
-Your Supabase project already contains the schema and SQL you need.
-
-This repo no longer depends on local SQL migration files being present in `supabase/`.
-
-## ElevenLabs Setup
-
-For full transcript support:
-
-1. configure the ElevenLabs webhook to hit `/elevenlabs/webhook`
-2. subscribe the webhook to post-call transcription events
-3. set `ELEVENLABS_WEBHOOK_SECRET` if you want signature validation
-
-## Can You Upload Only The Landing Page?
-
-Yes, but there are two different meanings:
-
-### Option 1: Deploy only the frontend project, keep the backend elsewhere
-
-Yes. This is the normal Vercel path.
-
-You can deploy `frontend/` to Vercel and point:
-
-- `NEXT_PUBLIC_API_URL`
-
-to your deployed backend.
-
-In that setup:
-
-- the landing page works
-- the waitlist form works
-- the dashboard routes also work if the backend is live
-
-### Option 2: Upload only the landing page with no backend
-
-Also possible, but then the current waitlist form will not work unless you change it.
-
-Right now the landing page submits to:
-
-- `/waitlist` on the backend
-
-So if you publish only the landing page and no backend exists:
-
-- the page renders
-- animations and layout work
-- the waitlist form will fail
-
-If you want a true frontend-only landing page deployment, you should either:
-
-1. remove the waitlist submission
-2. connect the form to another service
-3. keep a minimal backend route just for waitlist capture
-
-## Deployment Options
-
-### Vercel
-
-The landing page and frontend app are suitable for Vercel deployment.
-
-Recommended deployment target:
-
-- project root in Vercel: `frontend/`
-
-### Railway
-
-Railway is a reasonable choice if you want to upload the whole repo and run this as a monorepo project.
-
-Why it fits this repo:
-
-- Railway supports monorepo deployments
-- Railway supports both Next.js and FastAPI
-- Railway supports separate services with different root directories from one GitHub repo
-- Railway supports config-as-code and service-level build/start settings
-
-Suggested Railway setup for this repo:
-
-1. create one Railway project
-2. add a `frontend` service
-   - root directory: `/frontend`
-3. add a `backend` service
-   - root directory: `/backend`
-4. set frontend env vars
-   - `NEXT_PUBLIC_API_URL=<your backend public URL>`
-5. set backend env vars from [backend/.env.example](/Users/AllenPVT/Downloads/sentinel/backend/.env.example)
-6. expose the backend service publicly
-7. apply the Supabase SQL migrations before testing the full app
-
-If you want the simplest split:
-
-- `frontend` on Vercel
-- `backend` on Railway
-
-If you want one platform for everything:
-
-- both services on Railway is workable
-
-### Backend Hosting
-
-The backend can be deployed separately on a Python-friendly host.
-
-The frontend expects the backend to expose the current FastAPI routes.
-
-## Railway Notes For This Repo
-
-If you deploy the whole repository to Railway, treat it as a two-service monorepo:
-
-- service 1: Next.js frontend from `/frontend`
-- service 2: FastAPI backend from `/backend`
-
-This is the important operational point:
-
-- do not point one Railway service at the repo root and expect both apps to run automatically
-
-Use separate services and separate root directories.
+This repo includes:
+- [README.md](README.md)
+- [.gitignore](.gitignore)
+- [LICENSE](LICENSE)
+- [backend/.env.example](backend/.env.example)
+- [frontend/.env.local.example](frontend/.env.local.example)
 
 ## License
 
-This project is released under the MIT License.
-
-See [LICENSE](/Users/AllenPVT/Downloads/sentinel/LICENSE).
-
-## Current Repo State
-
-This repo is now set up to be pushable to GitHub:
-
-- root `.gitignore` exists
-- local env files are ignored
-- `venv`, `.next`, `node_modules`, and caches are ignored
-- env examples are included
-- backend requirements already exist in [backend/requirements.txt](/Users/AllenPVT/Downloads/sentinel/backend/requirements.txt)
-
-## Verification
-
-Recent checks run in this workspace:
-
-- frontend lint passed
-- frontend build passed
-- backend imports passed
-- backend compile checks passed
+MIT. See [LICENSE](LICENSE).

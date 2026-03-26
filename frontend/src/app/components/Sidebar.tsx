@@ -16,7 +16,6 @@ export default function Sidebar() {
   const [showChooser, setShowChooser] = useState(false);
   return (
     <aside className="fixed left-0 top-0 bottom-0 flex flex-col z-40" style={{ width: "var(--sidebar-w)", background: "var(--surface)", borderRight: "1px solid var(--border-soft)" }}>
-      {/* Logo */}
       <div className="flex items-center gap-3 px-6" style={{ height: 72, borderBottom: "1px solid var(--border-soft)" }}>
         <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: "var(--text-primary)" }}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-inverse)" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
@@ -24,7 +23,6 @@ export default function Sidebar() {
         <span className="text-[15px] font-medium" style={{ letterSpacing: "-0.01em" }}>Sentinel</span>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-4 py-5">
         <div className="space-y-1">
           {NAV.map((item) => {
@@ -50,7 +48,7 @@ export default function Sidebar() {
           })}
         </div>
 
-        {/* New watch - this is a visual hint, actual modal is on dashboard */}
+        {/* The sidebar only chooses the watch mode; the destination page owns the actual form. */}
         <div className="mt-8 px-1">
           <button
             onClick={() => setShowChooser(true)}
@@ -62,7 +60,6 @@ export default function Sidebar() {
         </div>
       </nav>
 
-      {/* Bottom */}
       <div className="px-5 py-4" style={{ borderTop: "1px solid var(--border-soft)" }}>
         <div className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full pulse-dot" style={{ background: "var(--success)" }} />
